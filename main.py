@@ -125,3 +125,26 @@ async def upload(files: list[UploadFile] = File(...)):
         uploaded.append(file.filename)
 
     return {"uploaded": uploaded}
+# routes/analyze.py
+
+from fastapi import APIRouter
+from utils.database import get_db
+from utils.file_handler import extract_text
+from services.parser import parse_resume
+
+router = APIRouter()
+
+@router.post("/analyze")
+def analyze():
+    db = get_db()
+
+    for r in db.resumes.find():
+        text = extract_text(r["file_path"])
+        parsed = parse_resume(text)
+
+        db.resumes.update_one(
+            {"_id": r["_id"]},
+            {"$set": {"parsed_data": parsed, "text": text}}
+        )
+
+    return {"message": "Analyzed"}
