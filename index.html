@@ -84,12 +84,16 @@
                 data.rankings.forEach((r, i) => {
                     const rankClass = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
                     html += '<div class="result-card">'
-                        + '<div class="rank-badge ' + rankClass + '">#' + (i+1) + '</div>'
-                        + '<div style="flex:1">'
-                        + '<div class="file-name">' + r.filename + '</div>'
-                        + '<div class="score">Match Score: ' + r.score + '%</div>'
-                        + '<div class="bar-bg"><div class="bar" style="width:' + r.score + '%"></div></div>'
-                        + '</div></div>';
+                    + '<div class="rank-badge ' + rankClass + '">#' + (i+1) + '</div>'
+                    + '<div style="flex:1">'
+                    + '<div class="file-name">' + r.filename + '</div>'
+                    + '<div class="score">Match Score: ' + r.score + '%</div>'
+                    + '<div class="bar-bg"><div class="bar" style="width:' + r.score + '%"></div></div>'
+                    + '<div style="margin-top:8px;font-size:13px;">'
+                    + '<span style="color:#27ae60;">✅ Matched: ' + (r.skills ? r.skills.join(", ") : "N/A") + '</span><br>'
+                    + '<span style="color:#e74c3c;">❌ Missing: ' + (r.explanation ? r.explanation.missing_skills.join(", ") : "N/A") + '</span>'
+                    + '</div>'
+                    + '</div></div>';
                 });
                 document.getElementById('results').innerHTML = html;
             } catch(e) {
