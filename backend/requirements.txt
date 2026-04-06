@@ -1,6 +1,6 @@
-echo "fastapi
+fastapi
 uvicorn
 pdfplumber
 spacy
 scikit-learn
-python-multipart" > requirements.txt
+python-multipart
