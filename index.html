@@ -1,0 +1,101 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResumeRanker</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0f0c29; min-height: 100vh; }
+        .hero { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); padding: 40px 20px; text-align: center; }
+        .hero h1 { color: white; font-size: 48px; margin-bottom: 10px; }
+        .hero h1 span { color: #a78bfa; }
+        .hero p { color: #c4b5fd; font-size: 18px; }
+        .container { max-width: 800px; margin: 40px auto; padding: 20px; }
+        .card { background: white; border-radius: 16px; padding: 30px; margin-bottom: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        .card h2 { color: #302b63; margin-bottom: 15px; font-size: 20px; }
+        textarea { width: 100%; height: 120px; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; resize: none; outline: none; }
+        textarea:focus { border-color: #a78bfa; }
+        .upload-area { border: 2px dashed #a78bfa; border-radius: 8px; padding: 30px; text-align: center; cursor: pointer; background: #f5f3ff; }
+        .upload-area p { color: #6d28d9; font-weight: bold; }
+        .upload-area span { color: #888; font-size: 13px; }
+        input[type="file"] { display: none; }
+        .btn { width: 100%; padding: 16px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn:hover { opacity: 0.9; }
+        .result-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 20px; }
+        .rank-badge { background: linear-gradient(135deg, #667eea, #764ba2); color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; flex-shrink: 0; }
+        .rank-1 { background: linear-gradient(135deg, #f7971e, #ffd200); }
+        .rank-2 { background: linear-gradient(135deg, #bdc3c7, #2c3e50); }
+        .rank-3 { background: linear-gradient(135deg, #cd7f32, #a0522d); }
+        .file-name { font-weight: bold; color: #302b63; font-size: 16px; }
+        .score { color: #6d28d9; font-weight: bold; font-size: 14px; }
+        .bar-bg { background: #f0e6ff; border-radius: 10px; height: 8px; margin-top: 6px; }
+        .bar { background: linear-gradient(135deg, #667eea, #764ba2); height: 8px; border-radius: 10px; }
+        #results { margin-top: 20px; }
+        .loading { text-align: center; color: white; font-size: 18px; padding: 20px; }
+        .file-list { margin-top: 10px; font-size: 13px; color: #6d28d9; }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>Resume<span>Ranker</span></h1>
+        <p>AI-powered resume screening for smarter hiring</p>
+    </div>
+    <div class="container">
+        <div class="card">
+            <h2>Job Description</h2>
+            <textarea id="jobDesc" placeholder="Paste the job description here... e.g. We need a Python developer with machine learning experience and strong communication skills."></textarea>
+        </div>
+        <div class="card">
+            <h2>Upload Resumes</h2>
+            <div class="upload-area" onclick="document.getElementById('resumes').click()">
+                <p>Click to upload PDF resumes</p>
+                <span>You can select multiple files at once</span>
+            </div>
+            <input type="file" id="resumes" multiple accept=".pdf" onchange="showFiles()">
+            <div class="file-list" id="fileList"></div>
+        </div>
+        <button class="btn" onclick="rankResumes()">Rank Resumes</button>
+        <div id="results"></div>
+    </div>
+    <script>
+        function showFiles() {
+            const files = document.getElementById('resumes').files;
+            let html = '';
+            for (let f of files) html += '📄 ' + f.name + '<br>';
+            document.getElementById('fileList').innerHTML = html;
+        }
+        async function rankResumes() {
+            const jobDesc = document.getElementById('jobDesc').value;
+            const files = document.getElementById('resumes').files;
+            if (!jobDesc || files.length === 0) {
+                alert('Please enter a job description and upload resumes!');
+                return;
+            }
+            document.getElementById('results').innerHTML = '<div class="loading">Ranking resumes...</div>';
+            const formData = new FormData();
+            formData.append('job_description', jobDesc);
+            for (let file of files) formData.append('resumes', file);
+            try {
+                const response = await fetch('/rank', { method: 'POST', body: formData });
+                const data = await response.json();
+                let html = '';
+                data.rankings.forEach((r, i) => {
+                    const rankClass = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
+                    html += '<div class="result-card">'
+                        + '<div class="rank-badge ' + rankClass + '">#' + (i+1) + '</div>'
+                        + '<div style="flex:1">'
+                        + '<div class="file-name">' + r.filename + '</div>'
+                        + '<div class="score">Match Score: ' + r.score + '%</div>'
+                        + '<div class="bar-bg"><div class="bar" style="width:' + r.score + '%"></div></div>'
+                        + '</div></div>';
+                });
+                document.getElementById('results').innerHTML = html;
+            } catch(e) {
+                document.getElementById('results').innerHTML = '<div class="loading">Error! Make sure backend is running.</div>';
+            }
+        }
+    </script>
+</body>
+</html>
