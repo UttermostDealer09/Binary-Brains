@@ -78,3 +78,21 @@ def parse_resume(text):
         "skills": skills,
         "experience": experience
     }
+# services/analyzer.py
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+def compute_similarity(resumes, job):
+    docs = resumes + [job]
+    tfidf = TfidfVectorizer(stop_words="english").fit_transform(docs)
+    return cosine_similarity(tfidf[:-1], tfidf[-1]).flatten()
+
+def explain_score(resume_skills, job_skills):
+    matched = list(set(resume_skills) & set(job_skills))
+    missing = list(set(job_skills) - set(resume_skills))
+
+    return {
+        "matched_skills": matched,
+        "missing_skills": missing
+    }
