@@ -130,7 +130,7 @@ async def upload(files: list[UploadFile] = File(...)):
 from fastapi import APIRouter
 from utils.database import get_db
 from utils.file_handler import extract_text
-from services.parser import parse_resume
+#from services.parser import parse_resume
 
 router = APIRouter()
 
@@ -148,3 +148,37 @@ def analyze():
         )
 
     return {"message": "Analyzed"}
+# routes/rank.py
+
+from fastapi import APIRouter
+from utils.database import get_db
+from services.analyzer import compute_similarity, explain_score
+
+router = APIRouter()
+
+@router.get("/rank")
+def rank():
+    db = get_db()
+
+    job = db.jobs.find_one()
+    resumes = list(db.resumes.find({"parsed_data": {"$ne": None}}))
+
+    texts = [r["text"] for r in resumes]
+    scores = compute_similarity(texts, job["description"])
+
+    results = []
+
+    for i, r in enumerate(resumes):
+        parsed = r["parsed_data"]
+
+        results.append({
+            "name": parsed["name"],
+            "score": float(scores[i]),
+            "explanation": explain_score(
+                parsed["skills"],
+                job["required_skills"]
+            )
+        })
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return {"rankings": results}
