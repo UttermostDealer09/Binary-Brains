@@ -78,7 +78,7 @@
             formData.append('job_description', jobDesc);
             for (let file of files) formData.append('resumes', file);
             try {
-                const response = await fetch('/rank', { method: 'POST', body: formData });
+                const response = await fetch('https://resume-ranker-server.onrender.com/rank', { method: 'POST', body: formData });
                 const data = await response.json();
                 let html = '';
                 data.rankings.forEach((r, i) => {
