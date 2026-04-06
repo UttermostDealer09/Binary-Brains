@@ -96,3 +96,32 @@ def explain_score(resume_skills, job_skills):
         "matched_skills": matched,
         "missing_skills": missing
     }
+# routes/upload.py
+
+from fastapi import APIRouter, UploadFile, File
+import uuid, os
+from utils.database import get_db
+
+router = APIRouter()
+
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+@router.post("/upload")
+async def upload(files: list[UploadFile] = File(...)):
+    db = get_db()
+    uploaded = []
+
+    for file in files:
+        if not file.filename.endswith((".pdf", ".docx")):
+            continue
+
+        path = f"{UPLOAD_DIR}/{uuid.uuid4()}_{file.filename}"
+
+        with open(path, "wb") as f:
+            f.write(await file.read())
+
+        db.resumes.insert_one({"file_path": path})
+        uploaded.append(file.filename)
+
+    return {"uploaded": uploaded}
