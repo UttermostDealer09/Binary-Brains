@@ -30,3 +30,19 @@ def connect_db():
 
 def get_db():
     return db
+# utils/file_handler.py
+
+import pdfplumber
+from docx import Document
+
+def extract_text(file_path):
+    if file_path.endswith(".pdf"):
+        with pdfplumber.open(file_path) as pdf:
+            return " ".join([p.extract_text() or "" for p in pdf.pages])
+
+    elif file_path.endswith(".docx"):
+        doc = Document(file_path)
+        return " ".join([p.text for p in doc.paragraphs])
+
+    else:
+        raise Exception("Unsupported format")
