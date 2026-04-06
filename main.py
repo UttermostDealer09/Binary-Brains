@@ -1,39 +1,59 @@
-# main.py
+# ============================================================
+# ResumeRanker - FINAL WORKING BACKEND (Single File Version)
+# ============================================================
 
-from fastapi import FastAPI
-from routes import upload, analyze, job, rank
-from utils.database import connect_db
+# Run:
+# uvicorn main:app --reload
+
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from pymongo import MongoClient
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from docx import Document
+import pdfplumber
+import spacy
+import uuid
+import os
+import re
+
+# ============================
+# INIT APP
+# ============================
 
 app = FastAPI(title="ResumeRanker API")
 
-connect_db()
+# ============================
+# DATABASE
+# ============================
 
-app.include_router(upload.router)
-app.include_router(analyze.router)
-app.include_router(job.router)
-app.include_router(rank.router)
+client = MongoClient("mongodb://localhost:27017/")
+db = client["resumeranker"]
 
-@app.get("/")
-def root():
-    return {"status": "ResumeRanker Running"}
-# utils/database.py
+# ============================
+# FILE STORAGE
+# ============================
 
-from pymongo import MongoClient
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-client = None
-db = None
+# ============================
+# NLP MODEL
+# ============================
 
-def connect_db():
-    global client, db
-    client = MongoClient("mongodb://localhost:27017/")
-    db = client["resumeranker"]
+nlp = spacy.load("en_core_web_sm")
 
-def get_db():
-    return db
-# utils/file_handler.py
+# ============================
+# SKILLS LIST
+# ============================
 
-import pdfplumber
-from docx import Document
+COMMON_SKILLS = [
+    "python", "java", "c++", "machine learning",
+    "nlp", "sql", "mongodb", "aws", "docker"
+]
+
+# ============================
+# FILE HANDLING
+# ============================
 
 def extract_text(file_path):
     if file_path.endswith(".pdf"):
@@ -46,17 +66,10 @@ def extract_text(file_path):
 
     else:
         raise Exception("Unsupported format")
-    # services/parser.py
 
-import spacy
-import re
-
-nlp = spacy.load("en_core_web_sm")
-
-COMMON_SKILLS = [
-    "python", "java", "c++", "machine learning",
-    "nlp", "sql", "mongodb", "aws", "docker"
-]
+# ============================
+# PARSER
+# ============================
 
 def parse_resume(text):
     doc = nlp(text)
@@ -78,10 +91,10 @@ def parse_resume(text):
         "skills": skills,
         "experience": experience
     }
-# services/analyzer.py
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+# ============================
+# ANALYZER
+# ============================
 
 def compute_similarity(resumes, job):
     docs = resumes + [job]
@@ -96,20 +109,13 @@ def explain_score(resume_skills, job_skills):
         "matched_skills": matched,
         "missing_skills": missing
     }
-# routes/upload.py
 
-from fastapi import APIRouter, UploadFile, File
-import uuid, os
-from utils.database import get_db
+# ============================
+# API: UPLOAD
+# ============================
 
-router = APIRouter()
-
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-@router.post("/upload")
+@app.post("/upload")
 async def upload(files: list[UploadFile] = File(...)):
-    db = get_db()
     uploaded = []
 
     for file in files:
@@ -121,47 +127,77 @@ async def upload(files: list[UploadFile] = File(...)):
         with open(path, "wb") as f:
             f.write(await file.read())
 
-        db.resumes.insert_one({"file_path": path})
+        db.resumes.insert_one({
+            "file_path": path,
+            "parsed_data": None,
+            "text": None
+        })
+
         uploaded.append(file.filename)
 
+    if not uploaded:
+        raise HTTPException(status_code=400, detail="No valid files uploaded")
+
     return {"uploaded": uploaded}
-# routes/analyze.py
 
-from fastapi import APIRouter
-from utils.database import get_db
-from utils.file_handler import extract_text
-#from services.parser import parse_resume
+# ============================
+# API: ANALYZE
+# ============================
 
-router = APIRouter()
-
-@router.post("/analyze")
+@app.post("/analyze")
 def analyze():
-    db = get_db()
+    resumes = list(db.resumes.find())
 
-    for r in db.resumes.find():
-        text = extract_text(r["file_path"])
-        parsed = parse_resume(text)
+    if not resumes:
+        raise HTTPException(status_code=400, detail="No resumes found")
 
-        db.resumes.update_one(
-            {"_id": r["_id"]},
-            {"$set": {"parsed_data": parsed, "text": text}}
-        )
+    for r in resumes:
+        try:
+            text = extract_text(r["file_path"])
+            parsed = parse_resume(text)
 
-    return {"message": "Analyzed"}
-# routes/rank.py
+            db.resumes.update_one(
+                {"_id": r["_id"]},
+                {"$set": {"parsed_data": parsed, "text": text}}
+            )
 
-from fastapi import APIRouter
-from utils.database import get_db
-from services.analyzer import compute_similarity, explain_score
+        except Exception as e:
+            db.resumes.update_one(
+                {"_id": r["_id"]},
+                {"$set": {"error": str(e)}}
+            )
 
-router = APIRouter()
+    return {"message": "Analysis completed"}
 
-@router.get("/rank")
+# ============================
+# API: JOB
+# ============================
+
+@app.post("/job")
+def add_job(job: dict):
+    if "description" not in job or "required_skills" not in job:
+        raise HTTPException(status_code=400, detail="Invalid job format")
+
+    db.jobs.delete_many({})
+    db.jobs.insert_one(job)
+
+    return {"message": "Job saved"}
+
+# ============================
+# API: RANK
+# ============================
+
+@app.get("/rank")
 def rank():
-    db = get_db()
-
     job = db.jobs.find_one()
+
+    if not job:
+        raise HTTPException(status_code=400, detail="No job found")
+
     resumes = list(db.resumes.find({"parsed_data": {"$ne": None}}))
+
+    if not resumes:
+        raise HTTPException(status_code=400, detail="No analyzed resumes")
 
     texts = [r["text"] for r in resumes]
     scores = compute_similarity(texts, job["description"])
@@ -172,13 +208,27 @@ def rank():
         parsed = r["parsed_data"]
 
         results.append({
-            "name": parsed["name"],
+            "name": parsed.get("name"),
             "score": float(scores[i]),
+            "skills": parsed.get("skills"),
+            "experience": parsed.get("experience"),
             "explanation": explain_score(
-                parsed["skills"],
+                parsed.get("skills", []),
                 job["required_skills"]
             )
         })
 
     results.sort(key=lambda x: x["score"], reverse=True)
-    return {"rankings": results}
+
+    return {
+        "total_candidates": len(results),
+        "rankings": results
+    }
+
+# ============================
+# ROOT
+# ============================
+
+@app.get("/")
+def root():
+    return {"status": "ResumeRanker Running"}
