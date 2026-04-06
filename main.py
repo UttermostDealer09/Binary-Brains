@@ -46,3 +46,35 @@ def extract_text(file_path):
 
     else:
         raise Exception("Unsupported format")
+    # services/parser.py
+
+import spacy
+import re
+
+nlp = spacy.load("en_core_web_sm")
+
+COMMON_SKILLS = [
+    "python", "java", "c++", "machine learning",
+    "nlp", "sql", "mongodb", "aws", "docker"
+]
+
+def parse_resume(text):
+    doc = nlp(text)
+
+    name = None
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            name = ent.text
+            break
+
+    text_lower = text.lower()
+    skills = [s for s in COMMON_SKILLS if s in text_lower]
+
+    exp_match = re.search(r"(\d+)\+?\s+years", text_lower)
+    experience = exp_match.group() if exp_match else "Not Found"
+
+    return {
+        "name": name,
+        "skills": skills,
+        "experience": experience
+    }
